@@ -147,3 +147,55 @@ conflict before making a major architectural change.
 - important architectural decisions
 - tests performed
 - known issues
+
+
+## Reusable Article Template
+
+The public article system must use ONE reusable article template.
+
+Every published article must be rendered using the same template/layout.
+
+The template structure and fixed components must remain consistent across
+articles.
+
+Article-specific data must be injected dynamically from the database.
+
+Dynamic content includes:
+
+- title
+- slug
+- cover image
+- excerpt
+- article content
+- category
+- tags
+- publication date
+- author
+- SEO metadata
+- affiliate products
+
+Fixed layout/components include:
+
+- header
+- navigation
+- breadcrumbs
+- article structure
+- advertisement slots
+- affiliate component positions
+- related articles section
+- footer
+
+Advertisement slots must have predefined positions in the article template.
+Their placement should NOT change from article to article unless the template
+itself is intentionally changed.
+
+The system must NOT generate a separate custom HTML template for each article.
+
+One reusable template must render all published articles based on their
+database content.
+
+Example:
+
+Article A → Template + Article A data → /post/article-a
+Article B → Template + Article B data → /post/article-b
+Article C → Template + Article C data → /post/article-c

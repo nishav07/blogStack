@@ -5,8 +5,6 @@
 We are building a production-oriented content publishing platform for a
 single non-technical admin.
 
-The admin is the user's father.
-
 The main purpose is to publish SEO-focused articles that can rank in search
 engines and generate revenue through advertising and affiliate links.
 
@@ -55,7 +53,7 @@ Individual articles must NOT require manually creating separate HTML pages.
 
 ## 3. Technology Stack
 
-Use the following stack unless there is a strong technical reason to change it.
+Use the following stack(MERN) unless there is a strong technical reason to change it
 
 ### Frontend
 
@@ -75,7 +73,7 @@ Mongoose
 
 ### Authentication
 
-Secure cookie-based authentication or another secure session-based approach.
+Secure cookie-based authentication(JWT ro which is suitable for thisi project).
 
 Do not store sensitive authentication credentials insecurely in localStorage.
 
