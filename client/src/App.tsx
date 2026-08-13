@@ -4,6 +4,7 @@ import { RequireAuth } from './admin/guards/RequireAuth';
 import { AdminLayout } from './admin/layouts/AdminLayout';
 import { LoginPage } from './admin/pages/LoginPage';
 import { DashboardPage } from './admin/pages/DashboardPage';
+import { ArticleFormPage } from './admin/pages/ArticleFormPage';
 
 export default function App() {
   return (
@@ -15,6 +16,8 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<DashboardPage />} />
+              <Route path="articles/new" element={<ArticleFormPage />} />
+              <Route path="articles/:id/edit" element={<ArticleFormPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/admin" replace />} />

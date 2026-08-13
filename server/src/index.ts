@@ -8,6 +8,8 @@ import { connectDatabase } from './config/db.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import healthRoutes from './routes/healthRoutes.js';
 import authRoutes from './routes/admin/authRoutes.js';
+import articleRoutes from './routes/admin/articleRoutes.js';
+import categoryRoutes from './routes/admin/categoryRoutes.js';
 
 const app = express();
 
@@ -27,6 +29,8 @@ if (env.nodeEnv === 'development') {
 
 app.use('/api', healthRoutes);
 app.use('/api/admin/auth', authRoutes);
+app.use('/api/admin/articles', articleRoutes);
+app.use('/api/admin/categories', categoryRoutes);
 
 app.use(errorHandler);
 

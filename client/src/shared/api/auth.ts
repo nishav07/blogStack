@@ -1,38 +1,5 @@
-import type { ApiError, User } from '../types/auth';
-
-const API_BASE = '/api';
-
-async function request<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const error = data as ApiError;
-    throw { status: response.status, ...error };
-  }
-
-  return data as T;
-}
-
-export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    request<T>(path, {
-      method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
-    }),
-};
+import { api } from './client';
+import type { User } from '../types/auth';
 
 export async function login(email: string, password: string): Promise<User> {
   const data = await api.post<{ user: User }>('/admin/auth/login', { email, password });

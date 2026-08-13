@@ -12,6 +12,10 @@ export class AppError extends Error {
   }
 }
 
+function isMongoDuplicateKeyError(err: Error): boolean {
+  return 'code' in err && (err as { code?: number }).code === 11000;
+}
+
 export function errorHandler(
   err: Error,
   _req: Request,
@@ -36,6 +40,11 @@ export function errorHandler(
 
   if (err instanceof AppError) {
     res.status(err.statusCode).json({ error: err.message });
+    return;
+  }
+
+  if (isMongoDuplicateKeyError(err)) {
+    res.status(409).json({ error: 'A record with this unique value already exists' });
     return;
   }
 
