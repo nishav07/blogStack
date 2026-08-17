@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { Category, ICategory } from '../models/Category.js';
 import { Article, IArticle } from '../models/Article.js';
 import { slugify } from '../utils/slugify.js';
+import { isContentEmpty } from '../utils/content.js';
 import { AppError } from '../middleware/errorHandler.js';
 import {
   CreateArticleInput,
@@ -24,7 +25,7 @@ export interface SafeArticle {
   slug: string;
   excerpt: string;
   content: string;
-  coverImage?: { url?: string; alt?: string } | null;
+  coverImage?: { url?: string; publicId?: string; alt?: string } | null;
   categoryId: string;
   categoryName: string;
   categorySlug: string;
@@ -129,14 +130,17 @@ async function ensureSlugAvailable(slug: string, excludeId?: string): Promise<vo
 
 function normalizeCoverImage(
   coverImage?: CreateArticleInput['coverImage']
-): { url?: string; alt?: string } | null {
+): { url?: string; publicId?: string; alt?: string } | null {
   if (!coverImage) return null;
-  if (!coverImage.url && !coverImage.alt) return null;
+  if (!coverImage.url && !coverImage.publicId && !coverImage.alt) return null;
   return {
     url: coverImage.url || undefined,
+    publicId: coverImage.publicId || undefined,
     alt: coverImage.alt || undefined,
   };
 }
+
+export { toSafeCategory };
 
 export async function listCategories(): Promise<SafeCategory[]> {
   const categories = await Category.find().sort({ name: 1 });
@@ -307,7 +311,7 @@ export async function publishArticle(id: string): Promise<SafeArticle> {
 
   if (!article.title?.trim()) errors.push('Title is required to publish');
   if (!article.slug?.trim()) errors.push('Slug is required to publish');
-  if (!article.content?.trim()) errors.push('Content is required to publish');
+  if (!article.content?.trim() || isContentEmpty(article.content)) errors.push('Content is required to publish');
   if (!article.categoryId) errors.push('Category is required to publish');
 
   if (errors.length > 0) {

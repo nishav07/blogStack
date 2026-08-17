@@ -3,9 +3,10 @@ import type { Article, ArticleStats, ArticleFormData } from '../types/article';
 
 function toPayload(data: ArticleFormData) {
   const coverImage =
-    data.coverImageUrl.trim() || data.coverImageAlt.trim()
+    data.coverImageUrl.trim() || data.coverImagePublicId.trim() || data.coverImageAlt.trim()
       ? {
           url: data.coverImageUrl.trim() || undefined,
+          publicId: data.coverImagePublicId.trim() || undefined,
           alt: data.coverImageAlt.trim() || undefined,
         }
       : null;

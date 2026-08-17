@@ -10,6 +10,8 @@ import healthRoutes from './routes/healthRoutes.js';
 import authRoutes from './routes/admin/authRoutes.js';
 import articleRoutes from './routes/admin/articleRoutes.js';
 import categoryRoutes from './routes/admin/categoryRoutes.js';
+import uploadRoutes from './routes/admin/uploadRoutes.js';
+import publicArticleRoutes from './routes/public/articleRoutes.js';
 
 const app = express();
 
@@ -31,6 +33,8 @@ app.use('/api', healthRoutes);
 app.use('/api/admin/auth', authRoutes);
 app.use('/api/admin/articles', articleRoutes);
 app.use('/api/admin/categories', categoryRoutes);
+app.use('/api/admin/uploads', uploadRoutes);
+app.use('/api/public', publicArticleRoutes);
 
 app.use(errorHandler);
 

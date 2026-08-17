@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CategorySelect } from '../components/CategorySelect';
 import { TagsInput } from '../components/TagsInput';
+import { ArticleEditor } from '../components/ArticleEditor';
+import { CoverImageUpload } from '../components/CoverImageUpload';
 import {
   createArticle,
   getArticle,
@@ -11,6 +13,8 @@ import {
 } from '../../shared/api/articles';
 import type { ApiErrorResponse, ArticleFormData } from '../../shared/types/article';
 import { slugify } from '../../shared/utils/slugify';
+import { isContentEmpty } from '../../shared/utils/content';
+import { useToast } from '../../shared/context/ToastContext';
 
 const emptyForm: ArticleFormData = {
   title: '',
@@ -18,6 +22,7 @@ const emptyForm: ArticleFormData = {
   excerpt: '',
   content: '',
   coverImageUrl: '',
+  coverImagePublicId: '',
   coverImageAlt: '',
   categoryId: '',
   tags: [],
@@ -34,15 +39,17 @@ export function ArticleFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [form, setForm] = useState<ArticleFormData>(emptyForm);
   const [status, setStatus] = useState<'draft' | 'published'>('draft');
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [isLoading, setIsLoading] = useState(isEdit);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [formError, setFormError] = useState('');
+
+  const isPublished = status === 'published';
 
   useEffect(() => {
     if (!id) return;
@@ -55,6 +62,7 @@ export function ArticleFormPage() {
           excerpt: article.excerpt,
           content: article.content,
           coverImageUrl: article.coverImage?.url ?? '',
+          coverImagePublicId: article.coverImage?.publicId ?? '',
           coverImageAlt: article.coverImage?.alt ?? '',
           categoryId: article.categoryId,
           tags: article.tags,
@@ -66,19 +74,17 @@ export function ArticleFormPage() {
         setSlugManuallyEdited(true);
       })
       .catch((err: ApiErrorResponse) => {
-        setFormError(err.error ?? 'Failed to load article');
+        showToast(err.error ?? 'Failed to load article', 'error');
       })
       .finally(() => setIsLoading(false));
-  }, [id]);
+  }, [id, showToast]);
 
   function updateField<K extends keyof ArticleFormData>(key: K, value: ArticleFormData[K]) {
     setForm((prev) => {
       const next = { ...prev, [key]: value };
-
-      if (key === 'title' && !slugManuallyEdited && status === 'draft') {
+      if (key === 'title' && !slugManuallyEdited && !isPublished) {
         next.slug = slugify(String(value));
       }
-
       return next;
     });
   }
@@ -95,12 +101,13 @@ export function ArticleFormPage() {
         mapped[detail.field] = detail.message;
       }
       setFieldErrors(mapped);
+      showToast('Please fix the validation errors', 'error');
     } else {
-      setFormError(err.error ?? 'Request failed');
+      showToast(err.error ?? 'Request failed', 'error');
     }
   }
 
-  function validateClient(): boolean {
+  function validateDraft(): boolean {
     const errors: Record<string, string> = {};
     if (!form.title.trim()) errors.title = 'Title is required';
     if (!form.slug.trim()) errors.slug = 'Slug is required';
@@ -109,69 +116,60 @@ export function ArticleFormPage() {
     return Object.keys(errors).length === 0;
   }
 
-  async function saveDraft(): Promise<string | null> {
-    if (!validateClient()) return null;
+  function validatePublish(): boolean {
+    const errors: Record<string, string> = {};
+    if (!form.title.trim()) errors.title = 'Title is required';
+    if (!form.slug.trim()) errors.slug = 'Slug is required';
+    if (isContentEmpty(form.content)) errors.content = 'Content is required to publish';
+    if (!form.categoryId) errors.categoryId = 'Category is required';
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
-    setIsSaving(true);
-    setFormError('');
-    setFieldErrors({});
-
-    try {
-      if (isEdit && id) {
-        const article = await updateArticle(id, form);
-        setStatus(article.status);
-        setPublishedAt(article.publishedAt);
-        return article.id;
-      }
-
-      const article = await createArticle(form);
-      setStatus(article.status);
-      setPublishedAt(article.publishedAt);
+  async function persistArticle(): Promise<string | null> {
+    if (isEdit && id) {
+      const article = await updateArticle(id, form);
       return article.id;
-    } catch (err) {
-      applyApiErrors(err as ApiErrorResponse);
-      return null;
-    } finally {
-      setIsSaving(false);
     }
+    const article = await createArticle(form);
+    return article.id;
   }
 
   async function handleSaveDraft(e: FormEvent) {
     e.preventDefault();
-    const articleId = await saveDraft();
-    if (articleId && !isEdit) {
-      navigate(`/admin/articles/${articleId}/edit`, { replace: true });
+    if (!validateDraft()) return;
+
+    setIsSubmitting(true);
+    setFieldErrors({});
+
+    try {
+      const articleId = await persistArticle();
+      if (!articleId) return;
+
+      showToast(isEdit ? 'Draft updated successfully' : 'Draft saved successfully');
+      if (!isEdit) {
+        navigate(`/admin/articles/${articleId}/edit`, { replace: true });
+      } else {
+        navigate('/admin');
+      }
+    } catch (err) {
+      applyApiErrors(err as ApiErrorResponse);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
-  async function handlePublish(e: FormEvent) {
-    e.preventDefault();
+  async function handlePublish() {
+    if (!validatePublish()) return;
 
-    const errors: Record<string, string> = {};
-    if (!form.title.trim()) errors.title = 'Title is required';
-    if (!form.slug.trim()) errors.slug = 'Slug is required';
-    if (!form.content.trim()) errors.content = 'Content is required to publish';
-    if (!form.categoryId) errors.categoryId = 'Category is required';
-
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
-      return;
-    }
-
-    setIsSaving(true);
-    setFormError('');
+    setIsSubmitting(true);
     setFieldErrors({});
 
     try {
       let articleId = id;
 
       if (isEdit && id) {
-        const updated = await updateArticle(id, form);
-        if (updated.status === 'published') {
-          setStatus(updated.status);
-          setPublishedAt(updated.publishedAt);
-          return;
-        }
+        await updateArticle(id, form);
         articleId = id;
       } else {
         const created = await createArticle(form);
@@ -180,42 +178,53 @@ export function ArticleFormPage() {
 
       if (!articleId) return;
 
-      const published = await publishArticle(articleId);
-      setStatus(published.status);
-      setPublishedAt(published.publishedAt);
-
-      if (!isEdit) {
-        navigate(`/admin/articles/${articleId}/edit`, { replace: true });
-      }
+      await publishArticle(articleId);
+      showToast('Article published successfully');
+      navigate('/admin');
     } catch (err) {
       applyApiErrors(err as ApiErrorResponse);
     } finally {
-      setIsSaving(false);
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleUpdate() {
+    if (!validatePublish()) return;
+    if (!id) return;
+
+    setIsSubmitting(true);
+    setFieldErrors({});
+
+    try {
+      await updateArticle(id, form);
+      showToast('Article updated successfully');
+      navigate('/admin');
+    } catch (err) {
+      applyApiErrors(err as ApiErrorResponse);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
   async function handleUnpublish() {
     if (!id) return;
 
-    setIsSaving(true);
-    setFormError('');
+    setIsSubmitting(true);
 
     try {
-      const article = await unpublishArticle(id);
-      setStatus(article.status);
-      setPublishedAt(article.publishedAt);
+      await unpublishArticle(id);
+      showToast('Article unpublished successfully');
+      navigate('/admin');
     } catch (err) {
       applyApiErrors(err as ApiErrorResponse);
     } finally {
-      setIsSaving(false);
+      setIsSubmitting(false);
     }
   }
 
   if (isLoading) {
     return <p className="text-sm text-gray-500">Loading article...</p>;
   }
-
-  const slugLocked = status === 'published';
 
   return (
     <div>
@@ -229,9 +238,7 @@ export function ArticleFormPage() {
               Status:{' '}
               <span
                 className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                  status === 'published'
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-yellow-100 text-yellow-800'
+                  isPublished ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                 }`}
               >
                 {status}
@@ -242,19 +249,10 @@ export function ArticleFormPage() {
             </p>
           )}
         </div>
-        <Link
-          to="/admin"
-          className="text-sm font-medium text-gray-600 hover:text-gray-900"
-        >
+        <Link to="/admin" className="text-sm font-medium text-gray-600 hover:text-gray-900">
           ← Back to dashboard
         </Link>
       </div>
-
-      {formError && (
-        <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-          {formError}
-        </div>
-      )}
 
       <form onSubmit={handleSaveDraft} className="space-y-6">
         <section className="rounded-lg border border-gray-200 bg-white p-6 space-y-5">
@@ -272,7 +270,7 @@ export function ArticleFormPage() {
               className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 ${
                 fieldErrors.title ? 'border-red-400' : 'border-gray-300'
               }`}
-              disabled={isSaving}
+              disabled={isSubmitting}
             />
             {fieldErrors.title && <p className="mt-1 text-sm text-red-600">{fieldErrors.title}</p>}
           </div>
@@ -286,28 +284,28 @@ export function ArticleFormPage() {
               type="text"
               value={form.slug}
               onChange={(e) => handleSlugChange(e.target.value)}
-              readOnly={slugLocked}
+              readOnly={isPublished}
               className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 ${
                 fieldErrors.slug ? 'border-red-400' : 'border-gray-300'
-              } ${slugLocked ? 'bg-gray-100 text-gray-600' : ''}`}
-              disabled={isSaving}
+              } ${isPublished ? 'bg-gray-100 text-gray-600' : ''}`}
+              disabled={isSubmitting}
             />
             {fieldErrors.slug && <p className="mt-1 text-sm text-red-600">{fieldErrors.slug}</p>}
             <p className="mt-1 text-xs text-gray-500">
-              {slugLocked
+              {isPublished
                 ? 'Slug is locked after publishing to preserve URL stability.'
                 : 'Auto-generated from title. You can edit it while the article is a draft.'}
             </p>
             {form.slug && (
               <p className="mt-1 text-xs text-gray-600">
-                Future URL: <code className="rounded bg-gray-100 px-1">/post/{form.slug}</code>
+                Public URL: <code className="rounded bg-gray-100 px-1">/post/{form.slug}</code>
               </p>
             )}
           </div>
 
           <div>
             <label htmlFor="excerpt" className="mb-1.5 block text-sm font-medium text-gray-700">
-              Excerpt
+              Article Preview
             </label>
             <textarea
               id="excerpt"
@@ -315,25 +313,18 @@ export function ArticleFormPage() {
               value={form.excerpt}
               onChange={(e) => updateField('excerpt', e.target.value)}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={isSaving}
+              disabled={isSubmitting}
             />
           </div>
 
           <div>
-            <label htmlFor="content" className="mb-1.5 block text-sm font-medium text-gray-700">
-              Content
-            </label>
-            <textarea
-              id="content"
-              rows={12}
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">Content</label>
+            <ArticleEditor
               value={form.content}
-              onChange={(e) => updateField('content', e.target.value)}
-              className={`w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500 ${
-                fieldErrors.content ? 'border-red-400' : 'border-gray-300'
-              }`}
-              disabled={isSaving}
+              onChange={(html) => updateField('content', html)}
+              disabled={isSubmitting}
+              error={fieldErrors.content}
             />
-            {fieldErrors.content && <p className="mt-1 text-sm text-red-600">{fieldErrors.content}</p>}
           </div>
 
           <div>
@@ -342,7 +333,7 @@ export function ArticleFormPage() {
               value={form.categoryId}
               onChange={(categoryId) => updateField('categoryId', categoryId)}
               error={fieldErrors.categoryId}
-              disabled={isSaving}
+              disabled={isSubmitting}
             />
           </div>
 
@@ -352,43 +343,27 @@ export function ArticleFormPage() {
               value={form.tags}
               onChange={(tags) => updateField('tags', tags)}
               error={fieldErrors.tags}
-              disabled={isSaving}
+              disabled={isSubmitting}
             />
           </div>
         </section>
 
         <section className="rounded-lg border border-gray-200 bg-white p-6 space-y-5">
-          <h2 className="text-lg font-medium text-gray-900">Cover image (optional)</h2>
-          <p className="text-sm text-gray-500">Image upload will be available in a later phase. URL only for now.</p>
-
-          <div>
-            <label htmlFor="coverImageUrl" className="mb-1.5 block text-sm font-medium text-gray-700">
-              Image URL
-            </label>
-            <input
-              id="coverImageUrl"
-              type="url"
-              value={form.coverImageUrl}
-              onChange={(e) => updateField('coverImageUrl', e.target.value)}
-              placeholder="https://example.com/image.jpg"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={isSaving}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="coverImageAlt" className="mb-1.5 block text-sm font-medium text-gray-700">
-              Alt text
-            </label>
-            <input
-              id="coverImageAlt"
-              type="text"
-              value={form.coverImageAlt}
-              onChange={(e) => updateField('coverImageAlt', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={isSaving}
-            />
-          </div>
+          <h2 className="text-lg font-medium text-gray-900">Cover image</h2>
+          <CoverImageUpload
+            url={form.coverImageUrl}
+            publicId={form.coverImagePublicId}
+            alt={form.coverImageAlt}
+            onChange={({ url, publicId, alt }) => {
+              setForm((prev) => ({
+                ...prev,
+                coverImageUrl: url,
+                coverImagePublicId: publicId,
+                coverImageAlt: alt,
+              }));
+            }}
+            disabled={isSubmitting}
+          />
         </section>
 
         <section className="rounded-lg border border-gray-200 bg-white p-6 space-y-5">
@@ -404,7 +379,7 @@ export function ArticleFormPage() {
               value={form.seoTitle}
               onChange={(e) => updateField('seoTitle', e.target.value)}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={isSaving}
+              disabled={isSubmitting}
             />
           </div>
 
@@ -418,38 +393,51 @@ export function ArticleFormPage() {
               value={form.seoDescription}
               onChange={(e) => updateField('seoDescription', e.target.value)}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={isSaving}
+              disabled={isSubmitting}
             />
           </div>
         </section>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
-          >
-            {isSaving ? 'Saving...' : 'Save Draft'}
-          </button>
+          {!isPublished && (
+            <>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSubmitting ? 'Saving...' : isEdit ? 'Save Draft' : 'Save Draft'}
+              </button>
+              <button
+                type="button"
+                onClick={handlePublish}
+                disabled={isSubmitting}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSubmitting ? 'Publishing...' : 'Publish'}
+              </button>
+            </>
+          )}
 
-          <button
-            type="button"
-            onClick={handlePublish}
-            disabled={isSaving}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {isSaving ? 'Publishing...' : status === 'published' ? 'Update & Keep Published' : 'Publish'}
-          </button>
-
-          {status === 'published' && isEdit && (
-            <button
-              type="button"
-              onClick={handleUnpublish}
-              disabled={isSaving}
-              className="rounded-md border border-yellow-400 bg-yellow-50 px-4 py-2 text-sm font-medium text-yellow-800 hover:bg-yellow-100 disabled:opacity-60"
-            >
-              Unpublish
-            </button>
+          {isPublished && isEdit && (
+            <>
+              <button
+                type="button"
+                onClick={handleUpdate}
+                disabled={isSubmitting}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSubmitting ? 'Updating...' : 'Update'}
+              </button>
+              <button
+                type="button"
+                onClick={handleUnpublish}
+                disabled={isSubmitting}
+                className="rounded-md border border-yellow-400 bg-yellow-50 px-4 py-2 text-sm font-medium text-yellow-800 hover:bg-yellow-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSubmitting ? 'Unpublishing...' : 'Unpublish'}
+              </button>
+            </>
           )}
 
           <Link

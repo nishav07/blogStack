@@ -3,6 +3,7 @@ import { z } from 'zod';
 const coverImageSchema = z
   .object({
     url: z.union([z.string().url('Cover image URL must be valid'), z.literal('')]).optional(),
+    publicId: z.string().max(200).optional(),
     alt: z.string().max(200, 'Alt text must be 200 characters or fewer').optional(),
   })
   .nullable()

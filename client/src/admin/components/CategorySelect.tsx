@@ -24,8 +24,7 @@ export function CategorySelect({ value, onChange, error, disabled }: CategorySel
       .finally(() => setIsLoading(false));
   }, []);
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleCreate() {
     if (!newName.trim()) {
       setCreateError('Category name is required');
       return;
@@ -41,10 +40,17 @@ export function CategorySelect({ value, onChange, error, disabled }: CategorySel
       setNewName('');
       setShowCreate(false);
     } catch (err) {
-      const error = err as { error?: string };
-      setCreateError(error.error ?? 'Failed to create category');
+      const apiErr = err as { error?: string };
+      setCreateError(apiErr.error ?? 'Failed to create category');
     } finally {
       setIsCreating(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleCreate();
     }
   }
 
@@ -81,11 +87,12 @@ export function CategorySelect({ value, onChange, error, disabled }: CategorySel
           + Create new category
         </button>
       ) : (
-        <form onSubmit={handleCreate} className="rounded-md border border-gray-200 bg-gray-50 p-3 space-y-2">
+        <div className="rounded-md border border-gray-200 bg-gray-50 p-3 space-y-2">
           <input
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Category name"
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             disabled={isCreating}
@@ -93,7 +100,8 @@ export function CategorySelect({ value, onChange, error, disabled }: CategorySel
           {createError && <p className="text-sm text-red-600">{createError}</p>}
           <div className="flex gap-2">
             <button
-              type="submit"
+              type="button"
+              onClick={handleCreate}
               disabled={isCreating}
               className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
             >
@@ -111,7 +119,7 @@ export function CategorySelect({ value, onChange, error, disabled }: CategorySel
               Cancel
             </button>
           </div>
-        </form>
+        </div>
       )}
     </div>
   );

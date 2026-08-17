@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface ICoverImage {
   url?: string;
+  publicId?: string;
   alt?: string;
 }
 
@@ -30,6 +31,7 @@ export interface IArticle extends Document {
 const coverImageSchema = new Schema<ICoverImage>(
   {
     url: { type: String, trim: true },
+    publicId: { type: String, trim: true },
     alt: { type: String, trim: true },
   },
   { _id: false }

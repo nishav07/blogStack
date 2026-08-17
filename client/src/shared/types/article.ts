@@ -9,6 +9,7 @@ export interface Category {
 
 export interface CoverImage {
   url?: string;
+  publicId?: string;
   alt?: string;
 }
 
@@ -47,6 +48,7 @@ export interface ArticleFormData {
   excerpt: string;
   content: string;
   coverImageUrl: string;
+  coverImagePublicId: string;
   coverImageAlt: string;
   categoryId: string;
   tags: string[];
